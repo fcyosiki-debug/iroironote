@@ -37,6 +37,11 @@ export default function TextCard({
     const [text, setText] = useState(content.text);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    // 外部からのコンテンツ更新を同期
+    useEffect(() => {
+        setText(content.text);
+    }, [content.text]);
+
     useEffect(() => {
         if (isEditing && textareaRef.current) {
             textareaRef.current.focus();

@@ -96,6 +96,7 @@ export default function Canvas({
                     filter: `workspace_id=eq.${workspaceId}`,
                 },
                 (payload) => {
+                    console.log('リアルタイムイベント受信:', payload.eventType, payload);
                     if (payload.eventType === 'INSERT') {
                         const newCard = convertToCard(payload.new);
                         setCards((prev) => [...prev.filter(c => c.id !== newCard.id), newCard]);
@@ -103,8 +104,10 @@ export default function Canvas({
                         const updated = convertToCard(payload.new);
                         // 編集中のカードはリアルタイム更新をスキップ（競合防止）
                         if (editingCardIdRef.current === updated.id) {
+                            console.log('編集中のためスキップ:', updated.id);
                             return;
                         }
+                        console.log('カードを更新:', updated.id, updated.content);
                         setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
                     } else if (payload.eventType === 'DELETE') {
                         const deleted = payload.old as { id: string };
@@ -273,14 +276,23 @@ export default function Canvas({
 
     // カードコンテンツを更新
     const updateCardContent = async (id: string, content: CardContent) => {
+        // 楽観的更新
         setCards((prev) =>
             prev.map((c) => (c.id === id ? { ...c, content } : c))
         );
 
-        await supabase
+        console.log('カード更新開始:', id, content);
+
+        const { error } = await supabase
             .from('cards')
             .update({ content })
             .eq('id', id);
+
+        if (error) {
+            console.error('カード更新エラー:', error);
+        } else {
+            console.log('カード更新成功:', id);
+        }
     };
 
     // カードを削除
