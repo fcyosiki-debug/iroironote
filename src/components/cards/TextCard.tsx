@@ -36,11 +36,30 @@ export default function TextCard({
     const content = card.content as TextContent;
     const [text, setText] = useState(content.text);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const prevEditingRef = useRef(isEditing);
+    const textRef = useRef(text);
+
+    // textの変更を追跡
+    useEffect(() => {
+        textRef.current = text;
+    }, [text]);
 
     // 外部からのコンテンツ更新を同期
     useEffect(() => {
         setText(content.text);
     }, [content.text]);
+
+    // 編集モード終了時に保存（アンマウント前に確実に保存）
+    useEffect(() => {
+        if (prevEditingRef.current === true && isEditing === false) {
+            // 編集モードが終了した
+            if (textRef.current !== content.text) {
+                console.log('編集終了により保存:', card.id, textRef.current);
+                onContentChange?.(card.id, { type: 'text', text: textRef.current });
+            }
+        }
+        prevEditingRef.current = isEditing;
+    }, [isEditing, card.id, content.text, onContentChange]);
 
     useEffect(() => {
         if (isEditing && textareaRef.current) {
@@ -50,6 +69,8 @@ export default function TextCard({
     }, [isEditing]);
 
     const handleBlur = () => {
+        // 注意：キャンバスクリック時はこのblurが呼ばれない可能性があるため、
+        // 上記のuseEffectでも保存を行っている
         if (text !== content.text) {
             onContentChange?.(card.id, { type: 'text', text });
         }
