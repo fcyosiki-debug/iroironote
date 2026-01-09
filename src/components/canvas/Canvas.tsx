@@ -18,6 +18,7 @@ interface CanvasProps {
     isShared: boolean;
     initialCards?: Card[];
     initialConnections?: CardConnection[];
+    initialGroups?: GroupBox[];
 }
 
 export default function Canvas({
@@ -25,6 +26,7 @@ export default function Canvas({
     isShared,
     initialCards = [],
     initialConnections = [],
+    initialGroups = [],
 }: CanvasProps) {
     const { user } = useAuth();
     const supabase = createClient();
@@ -50,7 +52,7 @@ export default function Canvas({
     const [connectingFromId, setConnectingFromId] = useState<string | null>(null);
 
     // グループボックス
-    const [groups, setGroups] = useState<GroupBox[]>([]);
+    const [groups, setGroups] = useState<GroupBox[]>(initialGroups);
     const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
     // 提出モーダル
@@ -145,6 +147,51 @@ export default function Canvas({
             )
             .subscribe();
 
+        // グループボックス変更のリアルタイム購読
+        const groupsChannel = supabase
+            .channel(`groups:${workspaceId}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'groups',
+                    filter: `workspace_id=eq.${workspaceId}`,
+                },
+                (payload) => {
+                    console.log('グループリアルタイムイベント:', payload.eventType, payload);
+                    if (payload.eventType === 'INSERT') {
+                        const data = payload.new;
+                        const newGroup: GroupBox = {
+                            id: data.id as string,
+                            x: data.x as number,
+                            y: data.y as number,
+                            width: data.width as number,
+                            height: data.height as number,
+                            color: data.color as string,
+                            label: data.label as string | undefined,
+                        };
+                        setGroups((prev) => [...prev.filter(g => g.id !== newGroup.id), newGroup]);
+                    } else if (payload.eventType === 'UPDATE') {
+                        const data = payload.new;
+                        const updated: GroupBox = {
+                            id: data.id as string,
+                            x: data.x as number,
+                            y: data.y as number,
+                            width: data.width as number,
+                            height: data.height as number,
+                            color: data.color as string,
+                            label: data.label as string | undefined,
+                        };
+                        setGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)));
+                    } else if (payload.eventType === 'DELETE') {
+                        const deleted = payload.old as { id: string };
+                        setGroups((prev) => prev.filter((g) => g.id !== deleted.id));
+                    }
+                }
+            )
+            .subscribe();
+
         // カーソル位置のPresence
         const presenceChannel = supabase.channel(`presence:${workspaceId}`);
 
@@ -185,6 +232,7 @@ export default function Canvas({
         return () => {
             supabase.removeChannel(cardsChannel);
             supabase.removeChannel(connectionsChannel);
+            supabase.removeChannel(groupsChannel);
             supabase.removeChannel(presenceChannel);
         };
     }, [isShared, workspaceId, user, supabase]);
@@ -425,7 +473,7 @@ export default function Canvas({
 
                 <Button
                     variant="secondary"
-                    onClick={() => {
+                    onClick={async () => {
                         const newGroup: GroupBox = {
                             id: generateId(),
                             x: 100 + Math.random() * 100,
@@ -436,6 +484,19 @@ export default function Canvas({
                         };
                         setGroups(prev => [...prev, newGroup]);
                         setSelectedGroupId(newGroup.id);
+
+                        // DBに保存
+                        await supabase.from('groups').insert({
+                            id: newGroup.id,
+                            workspace_id: workspaceId,
+                            x: newGroup.x,
+                            y: newGroup.y,
+                            width: newGroup.width,
+                            height: newGroup.height,
+                            color: newGroup.color,
+                            label: newGroup.label,
+                        });
+                        console.log('グループ追加完了:', newGroup.id);
                     }}
                 >
                     <Square size={18} className="mr-1" />
@@ -521,12 +582,17 @@ export default function Canvas({
                                 setSelectedGroupId(id);
                                 setSelectedCardId(null);
                             }}
-                            onUpdate={(id, updates) => {
+                            onUpdate={async (id, updates) => {
                                 setGroups(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g));
+                                // DBに保存
+                                await supabase.from('groups').update(updates).eq('id', id);
                             }}
-                            onDelete={(id) => {
+                            onDelete={async (id) => {
                                 setGroups(prev => prev.filter(g => g.id !== id));
                                 setSelectedGroupId(null);
+                                // DBから削除
+                                await supabase.from('groups').delete().eq('id', id);
+                                console.log('グループ削除完了:', id);
                             }}
                         />
                     ))}

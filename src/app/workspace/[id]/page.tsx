@@ -8,6 +8,7 @@ import { Button } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
 import type { Workspace, Card, CardConnection } from '@/types';
 import { ArrowLeft, Users, Lock, Loader2 } from 'lucide-react';
+import { GroupBox } from '@/components/canvas/GroupBox';
 
 export default function WorkspacePage() {
     const params = useParams();
@@ -19,6 +20,7 @@ export default function WorkspacePage() {
     const [workspace, setWorkspace] = useState<Workspace | null>(null);
     const [cards, setCards] = useState<Card[]>([]);
     const [connections, setConnections] = useState<CardConnection[]>([]);
+    const [groups, setGroups] = useState<GroupBox[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -98,8 +100,26 @@ export default function WorkspacePage() {
                     createdAt: c.created_at,
                 }));
 
+                // グループを取得
+                const { data: groupsData } = await supabase
+                    .from('groups')
+                    .select('*')
+                    .eq('workspace_id', workspaceId)
+                    .order('created_at', { ascending: true });
+
+                const transformedGroups: GroupBox[] = (groupsData || []).map((g) => ({
+                    id: g.id,
+                    x: g.x,
+                    y: g.y,
+                    width: g.width,
+                    height: g.height,
+                    color: g.color,
+                    label: g.label,
+                }));
+
                 setCards(transformedCards);
                 setConnections(transformedConnections);
+                setGroups(transformedGroups);
             } catch (err) {
                 console.error('エラー:', err);
                 setError('データの読み込みに失敗しました');
@@ -188,6 +208,7 @@ export default function WorkspacePage() {
                     isShared={isShared}
                     initialCards={cards}
                     initialConnections={connections}
+                    initialGroups={groups}
                 />
             </main>
         </div>
