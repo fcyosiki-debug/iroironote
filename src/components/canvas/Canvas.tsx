@@ -60,6 +60,9 @@ export default function Canvas({
     // カーソル色
     const cursorColor = useRef(getRandomCursorColor());
 
+    // 編集中カードIDをrefで追跡（リアルタイム更新との競合防止用）
+    const editingCardIdRef = useRef<string | null>(null);
+
     // Supabaseのsnake_caseデータをcamelCaseのCardに変換
     const convertToCard = (data: Record<string, unknown>): Card => ({
         id: data.id as string,
@@ -98,6 +101,10 @@ export default function Canvas({
                         setCards((prev) => [...prev.filter(c => c.id !== newCard.id), newCard]);
                     } else if (payload.eventType === 'UPDATE') {
                         const updated = convertToCard(payload.new);
+                        // 編集中のカードはリアルタイム更新をスキップ（競合防止）
+                        if (editingCardIdRef.current === updated.id) {
+                            return;
+                        }
                         setCards((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
                     } else if (payload.eventType === 'DELETE') {
                         const deleted = payload.old as { id: string };
@@ -247,6 +254,7 @@ export default function Canvas({
         setCards((prev) => [...prev, newCard]);
         setShowCreateModal(false);
         setEditingCardId(newCard.id);
+        editingCardIdRef.current = newCard.id;
         setSelectedCardId(newCard.id);
     };
 
@@ -479,6 +487,7 @@ export default function Canvas({
                 onClick={() => {
                     setSelectedCardId(null);
                     setEditingCardId(null);
+                    editingCardIdRef.current = null;
                     setConnectingFromId(null);
                     setSelectedGroupId(null); // グループ選択を解除
                 }}
@@ -533,7 +542,10 @@ export default function Canvas({
                                 onPositionChange={updateCardPosition}
                                 onSelect={selectCard}
                                 onDelete={isCardOwner(card) ? deleteCard : undefined}
-                                onEdit={(id) => setEditingCardId(id)}
+                                onEdit={(id) => {
+                                    setEditingCardId(id);
+                                    editingCardIdRef.current = id;
+                                }}
                                 onContentChange={updateCardContent as (id: string, content: TextContent | DrawingContent | MediaContent) => void}
                                 onStartConnect={startConnect}
                                 onUpload={card.cardType === 'media' ? uploadFile : undefined}
