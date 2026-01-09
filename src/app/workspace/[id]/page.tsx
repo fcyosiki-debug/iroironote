@@ -59,7 +59,8 @@ export default function WorkspacePage() {
 
                 // 接続を取得
                 const cardIds = cardsData?.map((c) => c.id) || [];
-                let connectionsData: CardConnection[] = [];
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let connectionsData: any[] = [];
 
                 if (cardIds.length > 0) {
                     const { data: connData } = await supabase
